@@ -1,0 +1,578 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Sparkles, Heart, Star, Zap } from 'lucide-react';
+
+const KoreanRescueGame = () => {
+  const styles = {
+    container: {
+      width: '100%',
+      height: '100vh',
+      background: 'linear-gradient(to bottom, #4c1d95, #3730a3, #4c1d95)',
+      overflow: 'hidden',
+      position: 'relative',
+      fontFamily: 'sans-serif'
+    },
+    starContainer: {
+      position: 'absolute',
+      inset: 0,
+      overflow: 'hidden'
+    },
+    star: {
+      position: 'absolute',
+      color: '#fef08a',
+      opacity: 0.5
+    },
+    overlay: {
+      position: 'absolute',
+      inset: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 20,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)'
+    },
+    startBox: {
+      textAlign: 'center',
+      padding: '2rem',
+      backgroundColor: 'rgba(107, 33, 168, 0.9)',
+      borderRadius: '1.5rem',
+      border: '4px solid #fbbf24',
+      maxWidth: '600px'
+    },
+    button: {
+      padding: '1rem 3rem',
+      backgroundColor: '#fbbf24',
+      color: '#4c1d95',
+      fontWeight: 'bold',
+      fontSize: '1.5rem',
+      borderRadius: '9999px',
+      border: 'none',
+      cursor: 'pointer',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+      marginTop: '2rem'
+    },
+    topUI: {
+      position: 'absolute',
+      top: '1rem',
+      left: '1rem',
+      right: '1rem',
+      zIndex: 10
+    },
+    topBar: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start'
+    },
+    scoreBox: {
+      backgroundColor: 'rgba(107, 33, 168, 0.8)',
+      padding: '1rem',
+      borderRadius: '0.5rem',
+      color: 'white'
+    },
+    sentenceBox: {
+      marginTop: '1rem',
+      backgroundColor: 'rgba(49, 46, 129, 0.9)',
+      padding: '1.5rem',
+      borderRadius: '0.5rem',
+      textAlign: 'center'
+    },
+    zombie: {
+      position: 'absolute',
+      cursor: 'pointer',
+      transition: 'transform 0.2s'
+    },
+    zombieShield: {
+      position: 'absolute',
+      top: '4rem',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      backgroundColor: '#1f2937',
+      border: '4px solid #4b5563',
+      borderRadius: '0.5rem',
+      padding: '0.5rem 1rem'
+    },
+    explosion: {
+      position: 'absolute',
+      fontSize: '4rem',
+      animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite'
+    },
+    groundZombie: {
+      position: 'absolute',
+      bottom: '1rem',
+      fontSize: '2.5rem',
+      animation: 'bounce 1s infinite'
+    },
+    princess: {
+      position: 'absolute',
+      bottom: '2rem',
+      right: '3rem',
+      textAlign: 'center'
+    },
+    princessBubble: {
+      color: 'white',
+      backgroundColor: '#ec4899',
+      padding: '0.25rem 0.75rem',
+      borderRadius: '9999px',
+      fontSize: '0.875rem',
+      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      marginTop: '0.5rem'
+    },
+    victoryBox: {
+      textAlign: 'center',
+      padding: '2rem',
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderRadius: '1.5rem',
+      maxWidth: '600px'
+    },
+    defeatBox: {
+      textAlign: 'center',
+      padding: '2rem',
+      backgroundColor: 'rgba(127, 29, 29, 0.9)',
+      borderRadius: '1.5rem',
+      border: '4px solid #dc2626',
+      maxWidth: '600px'
+    }
+  };
+  const [gameState, setGameState] = useState('start'); // start, playing, victory, defeat
+  const [stage, setStage] = useState(1);
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [lives, setLives] = useState(5);
+  const [currentSentence, setCurrentSentence] = useState('');
+  const [targetChars, setTargetChars] = useState([]);
+  const [correctIndex, setCorrectIndex] = useState(0);
+  const [zombies, setZombies] = useState([]);
+  const [groundZombies, setGroundZombies] = useState([]);
+  const [explosions, setExplosions] = useState([]);
+  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
+  const gameLoopRef = useRef(null);
+  const zombieSpawnRef = useRef(null);
+
+  const sentences = [
+    "한글은 세상을 밝힌다",
+    "공주님을 구해주세요",
+    "말모이 왕국을 지켜라",
+    "한글의 힘은 위대하다",
+    "용기있는 기사여 나아가라"
+  ];
+
+  const zombieTypes = ['parachute', 'ghost', 'funny'];
+  
+  const getRandomZombieEmoji = (type) => {
+    if (type === 'parachute') return '🪂';
+    if (type === 'ghost') return '👻';
+    return '🤡';
+  };
+
+  const startGame = () => {
+    const sentence = sentences[Math.min(stage - 1, sentences.length - 1)];
+    setCurrentSentence(sentence);
+    setTargetChars(sentence.split(''));
+    setCorrectIndex(0);
+    setZombies([]);
+    setGroundZombies([]);
+    setExplosions([]);
+    setGameState('playing');
+    setConsecutiveErrors(0);
+  };
+
+  const spawnZombie = () => {
+    if (gameState !== 'playing') return;
+    
+    const chars = targetChars;
+    const decoyChars = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차'];
+    
+    const isCorrectChar = Math.random() > 0.3;
+    let char;
+    
+    if (isCorrectChar && correctIndex < chars.length) {
+      const futureIndex = Math.min(correctIndex + Math.floor(Math.random() * 3), chars.length - 1);
+      char = chars[futureIndex];
+    } else {
+      char = decoyChars[Math.floor(Math.random() * decoyChars.length)];
+    }
+    
+    const type = zombieTypes[Math.floor(Math.random() * zombieTypes.length)];
+    
+    const newZombie = {
+      id: Date.now() + Math.random(),
+      char,
+      x: Math.random() * 80 + 10,
+      y: -10,
+      type,
+      emoji: getRandomZombieEmoji(type),
+      speed: 0.3 + Math.random() * 0.4,
+      isCorrect: char === chars[correctIndex]
+    };
+    
+    setZombies(prev => [...prev, newZombie]);
+  };
+
+  const handleZombieClick = (zombie) => {
+    if (gameState !== 'playing') return;
+    
+    if (zombie.char === targetChars[correctIndex]) {
+      // 정답!
+      setExplosions(prev => [...prev, { id: zombie.id, x: zombie.x, y: zombie.y }]);
+      setZombies(prev => prev.filter(z => z.id !== zombie.id));
+      
+      const newCombo = combo + 1;
+      setCombo(newCombo);
+      setConsecutiveErrors(0);
+      
+      let points = 10;
+      if (newCombo === 2) points = 40;
+      if (newCombo >= 3) points = 80;
+      
+      setScore(prev => prev + points);
+      setCorrectIndex(prev => prev + 1);
+      
+      // 한글 버스트!
+      if (newCombo >= 5) {
+        const incorrectZombies = zombies.filter(z => 
+          z.char !== targetChars[correctIndex + 1] && z.id !== zombie.id
+        );
+        const toRemove = incorrectZombies.slice(0, 2);
+        toRemove.forEach(z => {
+          setExplosions(prev => [...prev, { id: z.id, x: z.x, y: z.y }]);
+        });
+        setZombies(prev => prev.filter(z => !toRemove.includes(z)));
+      }
+      
+    } else {
+      // 오답
+      setCombo(0);
+      const newErrors = consecutiveErrors + 1;
+      setConsecutiveErrors(newErrors);
+      
+      let penalty = 1;
+      if (newErrors === 2) penalty = 4;
+      if (newErrors >= 3) penalty = 8;
+      
+      setScore(prev => Math.max(0, prev - penalty));
+    }
+  };
+
+  useEffect(() => {
+    if (correctIndex === targetChars.length && gameState === 'playing') {
+      setGameState('victory');
+    }
+  }, [correctIndex, targetChars.length, gameState]);
+
+  useEffect(() => {
+    if (gameState === 'playing') {
+      zombieSpawnRef.current = setInterval(() => {
+        spawnZombie();
+      }, 1500);
+      
+      gameLoopRef.current = setInterval(() => {
+        setZombies(prev => {
+          const updated = prev.map(z => ({
+            ...z,
+            y: z.y + z.speed
+          }));
+          
+          const reached = updated.filter(z => z.y >= 85);
+          const remaining = updated.filter(z => z.y < 85);
+          
+          reached.forEach(z => {
+            if (z.char === targetChars[correctIndex]) {
+              setGroundZombies(prev => [...prev, { 
+                id: z.id, 
+                x: z.x,
+                progress: 0 
+              }]);
+            }
+          });
+          
+          return remaining;
+        });
+        
+        setGroundZombies(prev => {
+          const updated = prev.map(gz => ({
+            ...gz,
+            progress: gz.progress + 0.5
+          }));
+          
+          const completed = updated.filter(gz => gz.progress >= 100);
+          if (completed.length > 0) {
+            setLives(l => {
+              const newLives = l - completed.length;
+              if (newLives <= 0) {
+                setGameState('defeat');
+              }
+              return Math.max(0, newLives);
+            });
+          }
+          
+          return updated.filter(gz => gz.progress < 100);
+        });
+        
+        setExplosions(prev => prev.filter((_, i) => i < prev.length - 1));
+        
+      }, 50);
+      
+      return () => {
+        clearInterval(gameLoopRef.current);
+        clearInterval(zombieSpawnRef.current);
+      };
+    }
+  }, [gameState, correctIndex, targetChars]);
+
+  return (
+    <div style={styles.container}>
+      {/* 별 배경 */}
+      <div style={styles.starContainer}>
+        {[...Array(50)].map((_, i) => (
+          <Star 
+            key={i} 
+            style={{
+              ...styles.star,
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animation: `twinkle ${Math.random() * 3 + 2}s infinite`
+            }}
+            size={Math.random() * 10 + 5}
+          />
+        ))}
+      </div>
+
+      {/* 시작 화면 */}
+      {gameState === 'start' && (
+        <div style={styles.overlay}>
+          <div style={styles.startBox}>
+            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fde047', marginBottom: '1rem' }}>
+              ⚔️ 말모이 왕국 ⚔️
+            </h1>
+            <h2 style={{ fontSize: '2rem', color: 'white', marginBottom: '1.5rem' }}>
+              한글 구출 작전
+            </h2>
+            <div style={{ fontSize: '1.25rem', color: '#fef3c7', lineHeight: '2' }}>
+              <p>🧙‍♂️ 흑마도사 '자모 파괴자'가 한글을 부쉈어요!</p>
+              <p>👸 공주님이 성탑에 갇혔습니다!</p>
+              <p>🛡️ 좀비들의 방패에서 한글을 순서대로 찾아</p>
+              <p>✨ 문장을 복원하세요!</p>
+            </div>
+            <button
+              onClick={startGame}
+              style={styles.button}
+              onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
+              onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+            >
+              게임 시작! 🎮
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 게임 화면 */}
+      {gameState === 'playing' && (
+        <>
+          {/* 상단 UI */}
+          <div style={styles.topUI}>
+            <div style={styles.topBar}>
+              <div style={styles.scoreBox}>
+                <div style={{ color: '#fde047', fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                  점수: {score}점
+                </div>
+                <div style={{ color: '#f9a8d4', fontSize: '1.1rem' }}>
+                  콤보: {combo} 🔥
+                </div>
+                <div style={{ color: 'white', fontSize: '1.1rem' }}>
+                  스테이지: {stage}
+                </div>
+              </div>
+              
+              <div style={{ ...styles.scoreBox, backgroundColor: 'rgba(153, 27, 27, 0.8)' }}>
+                <div style={{ color: 'white', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  생명력: {[...Array(lives)].map((_, i) => (
+                    <Heart key={i} style={{ color: '#f87171' }} fill="#f87171" size={24} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* 문장 표시 */}
+            <div style={styles.sentenceBox}>
+              <div style={{ fontSize: '2rem', fontWeight: 'bold', letterSpacing: '0.1em' }}>
+                {targetChars.map((char, i) => (
+                  <span 
+                    key={i}
+                    style={{
+                      display: 'inline-block',
+                      margin: '0 0.25rem',
+                      color: i < correctIndex ? '#fde047' : 'white',
+                      textShadow: i < correctIndex ? '0 0 10px gold' : 'none'
+                    }}
+                  >
+                    {char}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 좀비들 */}
+          {zombies.map(zombie => (
+            <div
+              key={zombie.id}
+              onClick={() => handleZombieClick(zombie)}
+              style={{
+                ...styles.zombie,
+                left: `${zombie.x}%`,
+                top: `${zombie.y}%`,
+                opacity: zombie.type === 'ghost' ? 0.7 : 1
+              }}
+              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <div style={{ fontSize: '4rem' }}>{zombie.emoji}</div>
+              <div style={styles.zombieShield}>
+                <div style={{ color: 'white', fontSize: '2rem', fontWeight: 'bold' }}>{zombie.char}</div>
+              </div>
+            </div>
+          ))}
+
+          {/* 폭발 효과 */}
+          {explosions.map(exp => (
+            <div
+              key={exp.id}
+              style={{
+                ...styles.explosion,
+                left: `${exp.x}%`,
+                top: `${exp.y}%`
+              }}
+            >
+              💥
+            </div>
+          ))}
+
+          {/* 바닥 좀비들 */}
+          {groundZombies.map(gz => (
+            <div
+              key={gz.id}
+              style={{
+                ...styles.groundZombie,
+                left: `${gz.x}%`
+              }}
+            >
+              🧟
+            </div>
+          ))}
+
+          {/* 공주 */}
+          <div style={styles.princess}>
+            <div style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>👸</div>
+            {groundZombies.length > 0 && (
+              <div style={styles.princessBubble}>
+                도와주세요!
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 승리 화면 */}
+      {gameState === 'victory' && (
+        <div style={{ ...styles.overlay, background: 'linear-gradient(to bottom, #fbbf24, #fb923c)' }}>
+          <Sparkles style={{ position: 'absolute', color: '#fef3c7', animation: 'pulse 2s infinite' }} size={100} />
+          <div style={styles.victoryBox}>
+            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#6b21a8', marginBottom: '1rem' }}>
+              🎉 문장 복원 완료! 🎉
+            </h1>
+            <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸🌟</div>
+            <p style={{ fontSize: '1.5rem', color: '#7c3aed', margin: '0.5rem 0' }}>"기사님, 감사합니다!"</p>
+            <p style={{ fontSize: '1.25rem', color: '#8b5cf6', margin: '0.5rem 0' }}>"한글의 힘이 돌아왔어요!"</p>
+            <div style={{ fontSize: '2rem', color: '#6b21a8', fontWeight: 'bold', margin: '1.5rem 0' }}>
+              최종 점수: {score}점
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setStage(s => s + 1);
+                  startGame();
+                }}
+                style={{ ...styles.button, backgroundColor: '#7c3aed' }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#6d28d9'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#7c3aed'}
+              >
+                다음 스테이지 →
+              </button>
+              <button
+                onClick={() => {
+                  setGameState('start');
+                  setStage(1);
+                  setScore(0);
+                  setLives(5);
+                  setCombo(0);
+                }}
+                style={{ ...styles.button, backgroundColor: '#4b5563' }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#374151'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#4b5563'}
+              >
+                처음으로
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 실패 화면 */}
+      {gameState === 'defeat' && (
+        <div style={styles.overlay}>
+          <div style={styles.defeatBox}>
+            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fca5a5', marginBottom: '1rem' }}>
+              😢 문장 복원 실패... 😢
+            </h1>
+            <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸💔</div>
+            <p style={{ fontSize: '1.5rem', color: '#fca5a5', margin: '0.5rem 0' }}>"안 돼...!"</p>
+            <div style={{ fontSize: '1.5rem', color: '#fca5a5', margin: '1.5rem 0' }}>
+              점수: {score}점
+            </div>
+            <button
+              onClick={startGame}
+              style={{ ...styles.button, backgroundColor: '#eab308', color: 'black' }}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#facc15'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#eab308'}
+            >
+              다시 도전하기! 💪
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(-5deg); }
+          50% { transform: rotate(5deg); }
+        }
+        @keyframes ping {
+          75%, 100% {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+        @keyframes bounce {
+          0%, 100% {
+            transform: translateY(-25%);
+            animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+          }
+          50% {
+            transform: translateY(0);
+            animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+          }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default KoreanRescueGame;
