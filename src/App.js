@@ -767,14 +767,14 @@ const KoreanRescueGame = () => {
           <Sparkles style={{ position: 'absolute', color: '#fef3c7', animation: 'pulse 2s infinite' }} size={100} />
           <div style={styles.victoryBox}>
             <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#6b21a8', marginBottom: '1rem' }}>
-              🎉 문장 복원 완료! 🎉
+              🎉 공주 구출 성공! 🎉
             </h1>
             <div style={{ fontSize: '4rem', margin: '1rem 0' }}>
               <Crown size={80} style={{ color: '#fbbf24', display: 'inline-block' }} />
             </div>
             <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸🏰</div>
             <p style={{ fontSize: '1.5rem', color: '#7c3aed', margin: '0.5rem 0' }}>"기사님, 감사합니다!"</p>
-            <p style={{ fontSize: '1.25rem', color: '#8b5cf6', margin: '0.5rem 0' }}>"한글의 힘이 돌아왔어요!"</p>
+            <p style={{ fontSize: '1.25rem', color: '#8b5cf6', margin: '0.5rem 0' }}>"공주님님이 돌아왔어요!"</p>
             <div style={{ fontSize: '2rem', color: '#6b21a8', fontWeight: 'bold', margin: '1.5rem 0' }}>
               최종 점수: {score}점
             </div>
@@ -814,7 +814,7 @@ const KoreanRescueGame = () => {
         <div style={{ ...styles.overlay, backgroundColor: 'rgba(0, 0, 0, 0.8)' }}>
           <div style={styles.defeatBox}>
             <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fca5a5', marginBottom: '1rem' }}>
-              😢 문장 복원 실패... 😢
+              😢 공주 구출 실패... 😢
             </h1>
             <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸💔</div>
             <p style={{ fontSize: '1.5rem', color: '#fca5a5', margin: '0.5rem 0' }}>"안 돼...!"</p>
