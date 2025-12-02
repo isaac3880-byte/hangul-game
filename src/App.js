@@ -36,11 +36,11 @@ const KoreanRescueGame = () => {
   console.log('Music playing:', isMusicPlaying); // 디버깅용
 
   const sentences = [
-    "한글은 세상을 밝힌다",
-    "공주님을 구해주세요",
-    "말모이 왕국을 지켜라",
-    "한글의 힘은 위대하다",
-    "용기있는 기사여 나아가라"
+    "나는 내가 빛나는 별인 줄 알았어요",
+    "한 번도 의심한 적 없었죠",
+    "몰랐어요, 난 내가 벌레라는 것을",
+    "그래도 괜찮아, 난 눈부시니까",
+    "그래도 괜찮아, 나는 빛날 테니까"
   ];
 
   const zombieTypes = ['parachute', 'ghost', 'funny'];
