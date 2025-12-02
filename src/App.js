@@ -596,16 +596,16 @@ const KoreanRescueGame = () => {
         <div style={styles.overlay}>
           <div style={styles.startBox}>
             <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fde047', marginBottom: '1rem' }}>
-              ⚔️ 말모이 왕국 ⚔️
+              ⚔️ 공주 구출 작전 ⚔️
             </h1>
             <h2 style={{ fontSize: '2rem', color: 'white', marginBottom: '1.5rem' }}>
-              한글 구출 작전
+              공주님을 부탁합니다
             </h2>
             <div style={{ fontSize: '1.25rem', color: '#fef3c7', lineHeight: '2' }}>
-              <p>🧙‍♂️ 흑마도사 '자모 파괴자'가 한글을 부쉈어요!</p>
+              <p>🧙‍♂️ 용감한 기사님, 공주를 구해 주세요!</p>
               <p>👸 공주님이 성탑에 갇혔습니다!</p>
-              <p>🛡️ 좀비들의 방패에서 한글을 순서대로 찾아</p>
-              <p>✨ 문장을 복원하세요!</p>
+              <p>🛡️ 좀비들의 방패의 한글을 순서대로 맞추면</p>
+              <p>✨ 공주님이 돌아옵니다.</p>
             </div>
             <button
               onClick={startGame}
