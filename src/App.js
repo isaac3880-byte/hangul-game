@@ -1,31 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Heart, Star, Zap, Crown } from 'lucide-react';
+import { Sparkles, Heart, Star, Crown, Music } from 'lucide-react';
 
 const KoreanRescueGame = () => {
   const [gameState, setGameState] = useState('start');
+  const [gameMode, setGameMode] = useState('');
   const [stage, setStage] = useState(1);
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
   const [lives, setLives] = useState(5);
-  const [currentSentence, setCurrentSentence] = useState('');
   const [targetChars, setTargetChars] = useState([]);
   const [correctIndex, setCorrectIndex] = useState(0);
   const [zombies, setZombies] = useState([]);
   const [groundZombies, setGroundZombies] = useState([]);
   const [explosions, setExplosions] = useState([]);
-  const [consecutiveErrors, setConsecutiveErrors] = useState(0);
   const [isFlashing, setIsFlashing] = useState(false);
   const [princessAnimation, setPrincessAnimation] = useState('normal');
   const [showVictoryAnimation, setShowVictoryAnimation] = useState(false);
-  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [showYoutubeInput, setShowYoutubeInput] = useState(false);
   
   const gameLoopRef = useRef(null);
   const zombieSpawnRef = useRef(null);
-  const bgMusicRef = useRef(null);
   const audioContextRef = useRef(null);
   const musicIntervalRef = useRef(null);
-
-  // 효과음 오디오 객체들
+  
+  // 효과음 캐시
   const audioCache = useRef({
     explosion: null,
     danger: null,
@@ -33,7 +32,13 @@ const KoreanRescueGame = () => {
     victory: null
   });
 
-  console.log('Music playing:', isMusicPlaying); // 디버깅용
+  // 효과음 파일 경로
+  const soundEffects = {
+    explosion: '/sounds/explosion.mp3',
+    danger: '/sounds/danger.mp3',
+    scream: '/sounds/scream.mp3',
+    victory: '/sounds/victory.mp3'
+  };
 
   const sentences = [
     "나는 내가 빛나는 별인 줄 알았어요",
@@ -43,9 +48,39 @@ const KoreanRescueGame = () => {
     "그래도 괜찮아, 나는 빛날 테니까"
   ];
 
+  const words = [
+    { kr: "이너뷰티", en: "Inner Beauty", cn: "内服美容" },
+    { kr: "올영세일", en: "Big Sale", cn: "超级大促" },
+    { kr: "원플러스원", en: "Buy 1 Get 1", cn: "买一送一" },
+    { kr: "한정기획", en: "Limited Set", cn: "限定套装" },
+    { kr: "품절임박", en: "Sold Out Soon", cn: "即将售罄" },
+    { kr: "올영픽", en: "Best Pick", cn: "必买推荐" }
+  ];
+
   const zombieTypes = ['parachute', 'ghost', 'funny'];
-  
-  // Web Audio API로 효과음 생성
+
+  // MP3 효과음 재생 함수
+  const playAudioSound = (type) => {
+    try {
+      // 캐시에서 오디오 가져오기 또는 새로 생성
+      if (!audioCache.current[type]) {
+        audioCache.current[type] = new Audio(soundEffects[type]);
+        audioCache.current[type].volume = 0.6; // 볼륨 60%
+      }
+      
+      const audio = audioCache.current[type];
+      audio.currentTime = 0; // 처음부터 재생
+      audio.play().catch(err => {
+        console.log('MP3 재생 실패, 기본 효과음 사용:', err);
+        playSound(type); // MP3 실패시 기본 효과음으로 폴백
+      });
+    } catch (error) {
+      console.error('효과음 재생 오류:', error);
+      playSound(type); // 오류시 기본 효과음으로 폴백
+    }
+  };
+
+  // 기본 효과음 (MP3 파일이 없을 때 사용)
   const playSound = (type) => {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
@@ -55,7 +90,6 @@ const KoreanRescueGame = () => {
     gainNode.connect(audioContext.destination);
     
     if (type === 'explosion') {
-      // 폭발음 (펑!)
       oscillator.type = 'sawtooth';
       oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
       oscillator.frequency.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
@@ -64,7 +98,6 @@ const KoreanRescueGame = () => {
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.3);
     } else if (type === 'danger') {
-      // 큰 일이예요! (경고음)
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
       oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
@@ -73,7 +106,6 @@ const KoreanRescueGame = () => {
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.2);
     } else if (type === 'scream') {
-      // 으악! (비명)
       oscillator.type = 'sawtooth';
       oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
       oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.5);
@@ -82,8 +114,7 @@ const KoreanRescueGame = () => {
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.5);
     } else if (type === 'victory') {
-      // 승리 멜로디
-      const notes = [523, 659, 784, 1047]; // C, E, G, C (한 옥타브 위)
+      const notes = [523, 659, 784, 1047];
       notes.forEach((freq, i) => {
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
@@ -99,39 +130,25 @@ const KoreanRescueGame = () => {
     }
   };
 
-  // 배경 음악 (간단한 루프)
   const playBackgroundMusic = () => {
-    console.log('playBackgroundMusic 호출됨'); // 디버깅
-    
-    // 기존 음악 정리
     if (musicIntervalRef.current) {
       clearInterval(musicIntervalRef.current);
       musicIntervalRef.current = null;
     }
     
-    // AudioContext 생성
     try {
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('AudioContext 생성됨:', audioContextRef.current.state);
       }
       
-      // AudioContext resume (필수!)
       if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().then(() => {
-          console.log('AudioContext resumed');
-        });
+        audioContextRef.current.resume();
       }
       
       const audioContext = audioContextRef.current;
-      let isPlaying = true; // 재생 상태 추적
       
       const playMelody = () => {
-        if (!isPlaying) return; // 중단되었으면 재생 안 함
-        
-        console.log('멜로디 재생');
-        
-        const notes = [262, 294, 330, 349, 392, 440, 494, 523]; // C, D, E, F, G, A, B, C
+        const notes = [262, 294, 330, 349, 392, 440, 494, 523];
         const duration = 0.25;
         const currentTime = audioContext.currentTime;
         
@@ -153,74 +170,27 @@ const KoreanRescueGame = () => {
             oscillator.start(currentTime + i * duration);
             oscillator.stop(currentTime + i * duration + duration);
           } catch (error) {
-            console.error('오실레이터 생성 오류:', error);
+            console.error('Oscillator error:', error);
           }
         });
       };
       
-      // 즉시 한 번 재생
       playMelody();
-      setIsMusicPlaying(true);
-      
-      // 2초마다 반복 (음악 길이와 맞춤)
       musicIntervalRef.current = setInterval(() => {
         if (audioContext.state === 'running') {
           playMelody();
-        } else {
-          console.log('AudioContext 상태:', audioContext.state);
         }
       }, 2000);
       
-      console.log('배경음악 인터벌 설정됨');
-      
-      // cleanup 함수 반환
-      return () => {
-        isPlaying = false;
-        if (musicIntervalRef.current) {
-          clearInterval(musicIntervalRef.current);
-        }
-      };
-      
     } catch (error) {
-      console.error('AudioContext 생성 오류:', error);
+      console.error('AudioContext error:', error);
     }
   };
   
-  // 배경 음악 정지
   const stopBackgroundMusic = () => {
-    console.log('stopBackgroundMusic 호출됨');
-    
     if (musicIntervalRef.current) {
       clearInterval(musicIntervalRef.current);
       musicIntervalRef.current = null;
-    }
-    setIsMusicPlaying(false);
-  };
-
-  // 효과음 URL (공개 CDN 사용 - 실제 사용시 다운로드한 파일 경로로 변경)
-  const soundEffects = {
-    explosion: '/sounds/explosion.mp3',  // 다운로드한 파일
-    danger: '/sounds/danger.mp3',
-    scream: '/sounds/scream.mp3',
-    victory: '/sounds/victory.mp3'
-  };
-
-  // 효과음 재생 함수 (오디오 파일 사용)
-  const playAudioSound = (type) => {
-    try {
-      // 캐시에서 오디오 가져오기 또는 새로 생성
-      if (!audioCache.current[type]) {
-        audioCache.current[type] = new Audio(soundEffects[type]);
-        audioCache.current[type].volume = 0.5; // 볼륨 50%
-      }
-      
-      const audio = audioCache.current[type];
-      audio.currentTime = 0; // 처음부터 재생
-      audio.play().catch(err => console.log('오디오 재생 오류:', err));
-    } catch (error) {
-      console.error('효과음 재생 실패:', error);
-      // 실패시 Web Audio API로 폴백
-      playSound(type);
     }
   };
 
@@ -230,24 +200,40 @@ const KoreanRescueGame = () => {
     return '🤡';
   };
 
-  const startGame = () => {
-    console.log('게임 시작!'); // 디버깅
+  const getYoutubeEmbedUrl = (url) => {
+    try {
+      let videoId = '';
+      if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1].split('?')[0];
+      } else if (url.includes('youtube.com/watch')) {
+        videoId = url.split('v=')[1].split('&')[0];
+      }
+      return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : '';
+    } catch (error) {
+      return '';
+    }
+  };
+
+  const startGame = (mode) => {
+    setGameMode(mode);
     
-    const sentence = sentences[Math.min(stage - 1, sentences.length - 1)];
-    setCurrentSentence(sentence);
-    setTargetChars(sentence.split(''));
+    if (mode === 'word') {
+      const word = words[Math.min(stage - 1, words.length - 1)];
+      setTargetChars(word.kr.split(''));
+    } else {
+      const sentence = sentences[Math.min(stage - 1, sentences.length - 1)];
+      setTargetChars(sentence.split(''));
+    }
+    
     setCorrectIndex(0);
     setZombies([]);
     setGroundZombies([]);
     setExplosions([]);
     setGameState('playing');
-    setConsecutiveErrors(0);
     setPrincessAnimation('normal');
     setShowVictoryAnimation(false);
     
-    // 배경 음악 시작 (즉시)
     setTimeout(() => {
-      console.log('배경음악 시작 타이머 실행');
       playBackgroundMusic();
     }, 200);
   };
@@ -277,8 +263,7 @@ const KoreanRescueGame = () => {
       y: -10,
       type,
       emoji: getRandomZombieEmoji(type),
-      speed: 0.3 + Math.random() * 0.4,
-      isCorrect: char === chars[correctIndex]
+      speed: 0.3 + Math.random() * 0.4
     };
     
     setZombies(prev => [...prev, newZombie]);
@@ -288,15 +273,13 @@ const KoreanRescueGame = () => {
     if (gameState !== 'playing') return;
     
     if (zombie.char === targetChars[correctIndex]) {
-      // 정답! 폭발음 (실제 효과음 사용)
-      playAudioSound('explosion');
+      playAudioSound('explosion'); // MP3 효과음 사용
       
       setExplosions(prev => [...prev, { id: zombie.id, x: zombie.x, y: zombie.y }]);
       setZombies(prev => prev.filter(z => z.id !== zombie.id));
       
       const newCombo = combo + 1;
       setCombo(newCombo);
-      setConsecutiveErrors(0);
       
       let points = 10;
       if (newCombo === 2) points = 40;
@@ -311,7 +294,7 @@ const KoreanRescueGame = () => {
         );
         const toRemove = incorrectZombies.slice(0, 2);
         toRemove.forEach(z => {
-          playAudioSound('explosion');
+          playAudioSound('explosion'); // MP3 효과음 사용
           setExplosions(prev => [...prev, { id: z.id, x: z.x, y: z.y }]);
         });
         setZombies(prev => prev.filter(z => !toRemove.includes(z)));
@@ -319,24 +302,13 @@ const KoreanRescueGame = () => {
       
     } else {
       setCombo(0);
-      const newErrors = consecutiveErrors + 1;
-      setConsecutiveErrors(newErrors);
-      
-      let penalty = 1;
-      if (newErrors === 2) penalty = 4;
-      if (newErrors >= 3) penalty = 8;
-      
-      setScore(prev => Math.max(0, prev - penalty));
     }
   };
 
   useEffect(() => {
     if (correctIndex === targetChars.length && gameState === 'playing') {
-      // 문장 완성! 배경 음악 정지
       stopBackgroundMusic();
-      
-      // 승리 사운드와 애니메이션 (실제 효과음 사용)
-      playAudioSound('victory');
+      playAudioSound('victory'); // MP3 효과음 사용
       setIsFlashing(true);
       setShowVictoryAnimation(true);
       
@@ -349,12 +321,10 @@ const KoreanRescueGame = () => {
 
   useEffect(() => {
     if (gameState === 'playing') {
-      // 좀비 스폰
       zombieSpawnRef.current = setInterval(() => {
         spawnZombie();
       }, 1500);
       
-      // 게임 루프
       gameLoopRef.current = setInterval(() => {
         setZombies(prev => {
           const updated = prev.map(z => ({
@@ -367,8 +337,7 @@ const KoreanRescueGame = () => {
           
           reached.forEach(z => {
             if (z.char === targetChars[correctIndex]) {
-              // 정답 좀비가 땅에 떨어짐 - 큰 일이예요! (실제 효과음)
-              playAudioSound('danger');
+              playAudioSound('danger'); // MP3 효과음 사용
               setGroundZombies(prev => [...prev, { 
                 id: z.id, 
                 x: z.x,
@@ -393,9 +362,8 @@ const KoreanRescueGame = () => {
             setLives(l => {
               const newLives = l - completed.length;
               if (newLives <= 0) {
-                // 게임 오버 - 배경 음악 정지 및 비명 소리 (실제 효과음)
                 stopBackgroundMusic();
-                playAudioSound('scream');
+                playAudioSound('scream'); // MP3 효과음 사용
                 setPrincessAnimation('captured');
                 setTimeout(() => {
                   setGameState('defeat');
@@ -412,17 +380,24 @@ const KoreanRescueGame = () => {
         
       }, 50);
       
-      // cleanup
       return () => {
         clearInterval(gameLoopRef.current);
         clearInterval(zombieSpawnRef.current);
-        // 게임이 끝날 때만 음악 정지 (playing이 아닐 때)
       };
     } else if (gameState !== 'playing') {
-      // playing이 아닌 다른 상태로 변경될 때 음악 정지
       stopBackgroundMusic();
     }
   }, [gameState, correctIndex, targetChars]);
+
+  const getCurrentWordInfo = () => {
+    if (gameMode === 'word' && gameState === 'playing') {
+      const wordIndex = Math.min(stage - 1, words.length - 1);
+      return words[wordIndex];
+    }
+    return null;
+  };
+
+  const wordInfo = getCurrentWordInfo();
 
   const styles = {
     container: {
@@ -436,16 +411,6 @@ const KoreanRescueGame = () => {
       fontFamily: 'sans-serif',
       transition: 'background 0.3s ease'
     },
-    starContainer: {
-      position: 'absolute',
-      inset: 0,
-      overflow: 'hidden'
-    },
-    star: {
-      position: 'absolute',
-      color: '#fef08a',
-      opacity: 0.5
-    },
     overlay: {
       position: 'absolute',
       inset: 0,
@@ -454,7 +419,8 @@ const KoreanRescueGame = () => {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 20,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)'
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      overflowY: 'auto'
     },
     startBox: {
       textAlign: 'center',
@@ -462,208 +428,133 @@ const KoreanRescueGame = () => {
       backgroundColor: 'rgba(107, 33, 168, 0.9)',
       borderRadius: '1.5rem',
       border: '4px solid #fbbf24',
-      maxWidth: '600px'
+      maxWidth: '600px',
+      maxHeight: '90vh',
+      overflowY: 'auto'
     },
     button: {
-      padding: '1rem 3rem',
+      padding: '0.75rem 1.5rem',
       backgroundColor: '#fbbf24',
       color: '#4c1d95',
       fontWeight: 'bold',
-      fontSize: '1.5rem',
+      fontSize: '1rem',
       borderRadius: '9999px',
       border: 'none',
       cursor: 'pointer',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-      marginTop: '2rem'
+      margin: '0.25rem'
     },
-    topUI: {
-      position: 'absolute',
-      top: '1rem',
-      left: '1rem',
-      right: '1rem',
-      zIndex: 10
-    },
-    topBar: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start'
-    },
-    scoreBox: {
-      backgroundColor: 'rgba(107, 33, 168, 0.8)',
-      padding: '1rem',
+    input: {
+      padding: '0.5rem',
+      fontSize: '0.9rem',
       borderRadius: '0.5rem',
-      color: 'white'
-    },
-    sentenceBox: {
-      marginTop: '1rem',
-      backgroundColor: 'rgba(49, 46, 129, 0.9)',
-      padding: '1.5rem',
-      borderRadius: '0.5rem',
-      textAlign: 'center'
-    },
-    zombie: {
-      position: 'absolute',
-      cursor: 'pointer',
-      transition: 'transform 0.2s'
-    },
-    zombieShield: {
-      position: 'absolute',
-      top: '4rem',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      backgroundColor: '#1f2937',
-      border: '4px solid #4b5563',
-      borderRadius: '0.5rem',
-      padding: '0.5rem 1rem'
-    },
-    explosion: {
-      position: 'absolute',
-      fontSize: '4rem',
-      animation: 'explode 0.5s ease-out forwards'
-    },
-    groundZombie: {
-      position: 'absolute',
-      bottom: '1rem',
-      fontSize: '2.5rem',
-      animation: 'crawl 1s infinite'
-    },
-    princess: {
-      position: 'absolute',
-      bottom: '2rem',
-      right: '3rem',
-      textAlign: 'center',
-      transition: 'all 0.3s ease'
-    },
-    princessBubble: {
-      color: 'white',
-      backgroundColor: '#ec4899',
-      padding: '0.25rem 0.75rem',
-      borderRadius: '9999px',
-      fontSize: '0.875rem',
-      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      marginTop: '0.5rem'
-    },
-    victoryBox: {
-      textAlign: 'center',
-      padding: '2rem',
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderRadius: '1.5rem',
-      maxWidth: '600px'
-    },
-    defeatBox: {
-      textAlign: 'center',
-      padding: '2rem',
-      backgroundColor: 'rgba(127, 29, 29, 0.9)',
-      borderRadius: '1.5rem',
-      border: '4px solid #dc2626',
-      maxWidth: '600px'
-    },
-    cloudCarriage: {
-      position: 'absolute',
-      fontSize: '5rem',
-      animation: showVictoryAnimation ? 'descend 2s ease-out forwards' : 'none',
-      top: '-100px',
-      left: '50%',
-      transform: 'translateX(-50%)'
-    },
-    firework: {
-      position: 'absolute',
-      fontSize: '3rem',
-      animation: 'firework 1s ease-out infinite'
+      border: '2px solid #fbbf24',
+      width: '100%',
+      marginBottom: '0.5rem'
     }
   };
 
   return (
     <div style={styles.container}>
-      {/* 별 배경 */}
-      <div style={styles.starContainer}>
-        {[...Array(50)].map((_, i) => (
-          <Star 
-            key={i} 
-            style={{
-              ...styles.star,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `twinkle ${Math.random() * 3 + 2}s infinite`
-            }}
-            size={Math.random() * 10 + 5}
-          />
-        ))}
-      </div>
-
-      {/* 시작 화면 */}
       {gameState === 'start' && (
         <div style={styles.overlay}>
           <div style={styles.startBox}>
-            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fde047', marginBottom: '1rem' }}>
+            <h1 style={{ fontSize: '2rem', color: '#fde047', marginBottom: '0.5rem' }}>
               ⚔️ 공주 구출 작전 ⚔️
             </h1>
-            <h2 style={{ fontSize: '2rem', color: 'white', marginBottom: '1.5rem' }}>
-              공주님을 부탁합니다
-            </h2>
-            <div style={{ fontSize: '1.25rem', color: '#fef3c7', lineHeight: '2' }}>
-              <p>🧙‍♂️ 용감한 기사님, 공주를 구해 주세요!</p>
-              <p>👸 공주님이 성탑에 갇혔습니다!</p>
-              <p>🛡️ 좀비들의 방패의 한글을 순서대로 맞추면</p>
-              <p>✨ 공주님이 돌아옵니다.</p>
-            </div>
-            <button
-              onClick={startGame}
-              style={styles.button}
-              onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
-              onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
-            >
-              게임 시작! 🎮
-            </button>
-            <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#fef3c7' }}>
-              🔊 소리와 함께 즐기세요!
+            <p style={{ fontSize: '1rem', color: '#fef3c7', marginBottom: '1rem' }}>
+              용감한 기사님, 공주를 구해주세요!
+            </p>
+
+            {!showYoutubeInput && (
+              <button
+                onClick={() => setShowYoutubeInput(true)}
+                style={{ ...styles.button, backgroundColor: '#ef4444' }}
+              >
+                <Music size={16} style={{ display: 'inline', marginRight: '0.5rem' }} />
+                유튜브 음악
+              </button>
+            )}
+
+            {showYoutubeInput && (
+              <div style={{ marginBottom: '1rem' }}>
+                <input
+                  type="text"
+                  placeholder="유튜브 URL"
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  style={styles.input}
+                />
+                {youtubeUrl && getYoutubeEmbedUrl(youtubeUrl) && (
+                  <iframe
+                    width="100%"
+                    height="180"
+                    src={getYoutubeEmbedUrl(youtubeUrl)}
+                    frameBorder="0"
+                    allow="autoplay"
+                    style={{ borderRadius: '0.5rem', marginBottom: '0.5rem' }}
+                  ></iframe>
+                )}
+                <button
+                  onClick={() => setShowYoutubeInput(false)}
+                  style={{ ...styles.button, backgroundColor: '#6b7280', fontSize: '0.9rem' }}
+                >
+                  닫기
+                </button>
+              </div>
+            )}
+
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ color: '#fde047', marginBottom: '0.5rem' }}>게임 선택:</p>
+              <button
+                onClick={() => startGame('word')}
+                style={styles.button}
+              >
+                단어 게임 🎯
+              </button>
+              <button
+                onClick={() => startGame('sentence')}
+                style={styles.button}
+              >
+                문장 게임 📝
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 게임 화면 */}
       {gameState === 'playing' && (
         <>
-          {/* 상단 UI */}
-          <div style={styles.topUI}>
-            <div style={styles.topBar}>
-              <div style={styles.scoreBox}>
-                <div style={{ color: '#fde047', fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                  점수: {score}점
-                </div>
-                <div style={{ color: '#f9a8d4', fontSize: '1.1rem' }}>
-                  콤보: {combo} 🔥
-                </div>
-                <div style={{ color: 'white', fontSize: '1.1rem' }}>
-                  스테이지: {stage}
-                </div>
-                <div style={{ color: isMusicPlaying ? '#4ade80' : '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                  🔊 {isMusicPlaying ? '음악 재생중' : '음악 대기중'}
-                </div>
+          <div style={{ position: 'absolute', top: '0.5rem', left: '0.5rem', right: '0.5rem', zIndex: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ backgroundColor: 'rgba(107, 33, 168, 0.8)', padding: '0.5rem', borderRadius: '0.5rem', color: 'white', fontSize: '0.9rem' }}>
+                <div>점수: {score}</div>
+                <div>콤보: {combo} 🔥</div>
               </div>
               
-              <div style={{ ...styles.scoreBox, backgroundColor: 'rgba(153, 27, 27, 0.8)' }}>
-                <div style={{ color: 'white', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  생명력: {[...Array(lives)].map((_, i) => (
-                    <Heart key={i} style={{ color: '#f87171' }} fill="#f87171" size={24} />
-                  ))}
-                </div>
+              <div style={{ backgroundColor: 'rgba(153, 27, 27, 0.8)', padding: '0.5rem', borderRadius: '0.5rem', color: 'white', fontSize: '0.9rem' }}>
+                생명: {[...Array(lives)].map((_, i) => (
+                  <Heart key={i} style={{ color: '#f87171', display: 'inline' }} fill="#f87171" size={16} />
+                ))}
               </div>
             </div>
             
-            {/* 문장 표시 */}
-            <div style={styles.sentenceBox}>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', letterSpacing: '0.1em' }}>
+            {wordInfo && (
+              <div style={{ marginTop: '0.5rem', backgroundColor: 'rgba(49, 46, 129, 0.8)', padding: '0.5rem', borderRadius: '0.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'white' }}>
+                <div style={{ color: '#fde047', fontWeight: 'bold' }}>{wordInfo.kr}</div>
+                <div>EN: {wordInfo.en} | CN: {wordInfo.cn}</div>
+              </div>
+            )}
+
+            <div style={{ marginTop: '0.5rem', backgroundColor: 'rgba(49, 46, 129, 0.9)', padding: '0.75rem', borderRadius: '0.5rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
                 {targetChars.map((char, i) => (
                   <span 
                     key={i}
                     style={{
                       display: 'inline-block',
-                      margin: '0 0.25rem',
+                      margin: '0 0.1rem',
                       color: i < correctIndex ? '#fde047' : 'white',
-                      textShadow: i < correctIndex ? '0 0 10px gold' : 'none',
-                      animation: i < correctIndex ? 'glow 0.5s ease-in' : 'none'
+                      textShadow: i < correctIndex ? '0 0 10px gold' : 'none'
                     }}
                   >
                     {char}
@@ -673,55 +564,40 @@ const KoreanRescueGame = () => {
             </div>
           </div>
 
-          {/* 승리 애니메이션 - 구름 마차 */}
-          {showVictoryAnimation && (
-            <>
-              <div style={styles.cloudCarriage}>
-                ☁️👸☁️
-              </div>
-              {[...Array(10)].map((_, i) => (
-                <div 
-                  key={i}
-                  style={{
-                    ...styles.firework,
-                    left: `${Math.random() * 100}%`,
-                    top: `${Math.random() * 100}%`,
-                    animationDelay: `${Math.random() * 0.5}s`
-                  }}
-                >
-                  ✨
-                </div>
-              ))}
-            </>
-          )}
-
-          {/* 좀비들 */}
           {zombies.map(zombie => (
             <div
               key={zombie.id}
               onClick={() => handleZombieClick(zombie)}
               style={{
-                ...styles.zombie,
+                position: 'absolute',
+                cursor: 'pointer',
                 left: `${zombie.x}%`,
                 top: `${zombie.y}%`,
                 opacity: zombie.type === 'ghost' ? 0.7 : 1
               }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-              <div style={{ fontSize: '4rem' }}>{zombie.emoji}</div>
-              <div style={styles.zombieShield}>
-                <div style={{ color: 'white', fontSize: '2rem', fontWeight: 'bold' }}>{zombie.char}</div>
+              <div style={{ fontSize: '3rem' }}>{zombie.emoji}</div>
+              <div style={{
+                position: 'absolute',
+                top: '3rem',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                backgroundColor: '#1f2937',
+                border: '3px solid #4b5563',
+                borderRadius: '0.5rem',
+                padding: '0.25rem 0.75rem'
+              }}>
+                <div style={{ color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>{zombie.char}</div>
               </div>
             </div>
           ))}
 
-          {/* 폭발 효과 */}
           {explosions.map(exp => (
             <div
               key={exp.id}
               style={{
-                ...styles.explosion,
+                position: 'absolute',
+                fontSize: '3rem',
                 left: `${exp.x}%`,
                 top: `${exp.y}%`
               }}
@@ -730,30 +606,33 @@ const KoreanRescueGame = () => {
             </div>
           ))}
 
-          {/* 바닥 좀비들 */}
           {groundZombies.map(gz => (
             <div
               key={gz.id}
               style={{
-                ...styles.groundZombie,
-                left: `${gz.x}%`
+                position: 'absolute',
+                bottom: '1rem',
+                left: `${gz.x}%`,
+                fontSize: '2rem'
               }}
             >
               🧟
             </div>
           ))}
 
-          {/* 공주 */}
           <div style={{
-            ...styles.princess,
-            transform: princessAnimation === 'scared' ? 'scale(1.2) translateY(-10px)' : 'scale(1)',
+            position: 'absolute',
+            bottom: '1rem',
+            right: '2rem',
+            textAlign: 'center',
+            transform: princessAnimation === 'scared' ? 'scale(1.2)' : 'scale(1)',
             filter: princessAnimation === 'captured' ? 'brightness(0.3)' : 'brightness(1)'
           }}>
-            <div style={{ fontSize: '4rem', marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '3rem' }}>
               {princessAnimation === 'captured' ? '😱' : '👸'}
             </div>
             {groundZombies.length > 0 && princessAnimation !== 'captured' && (
-              <div style={styles.princessBubble}>
+              <div style={{ color: 'white', backgroundColor: '#ec4899', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' }}>
                 큰 일이예요!
               </div>
             )}
@@ -761,132 +640,74 @@ const KoreanRescueGame = () => {
         </>
       )}
 
-      {/* 승리 화면 */}
       {gameState === 'victory' && (
         <div style={{ ...styles.overlay, background: 'linear-gradient(to bottom, #fbbf24, #fb923c)' }}>
-          <Sparkles style={{ position: 'absolute', color: '#fef3c7', animation: 'pulse 2s infinite' }} size={100} />
-          <div style={styles.victoryBox}>
-            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#6b21a8', marginBottom: '1rem' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '1.5rem', maxWidth: '500px' }}>
+            <h1 style={{ fontSize: '2rem', color: '#6b21a8', marginBottom: '1rem' }}>
               🎉 공주 구출 성공! 🎉
             </h1>
-            <div style={{ fontSize: '4rem', margin: '1rem 0' }}>
-              <Crown size={80} style={{ color: '#fbbf24', display: 'inline-block' }} />
+            <div style={{ fontSize: '2.5rem', margin: '1rem 0' }}>👸🏰</div>
+            <p style={{ fontSize: '1rem', color: '#7c3aed' }}>공주님이 돌아왔어요!</p>
+            <div style={{ fontSize: '1.2rem', color: '#6b21a8', fontWeight: 'bold', margin: '1rem 0' }}>
+              점수: {score}점
             </div>
-            <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸🏰</div>
-            <p style={{ fontSize: '1.5rem', color: '#7c3aed', margin: '0.5rem 0' }}>"기사님, 감사합니다!"</p>
-            <p style={{ fontSize: '1.25rem', color: '#8b5cf6', margin: '0.5rem 0' }}>"공주님님이 돌아왔어요!"</p>
-            <div style={{ fontSize: '2rem', color: '#6b21a8', fontWeight: 'bold', margin: '1.5rem 0' }}>
-              최종 점수: {score}점
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <p style={{ color: '#6b21a8', marginBottom: '0.5rem' }}>다음 게임:</p>
               <button
                 onClick={() => {
                   setStage(s => s + 1);
-                  startGame();
+                  startGame('word');
                 }}
                 style={{ ...styles.button, backgroundColor: '#7c3aed', color: 'white' }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#6d28d9'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#7c3aed'}
               >
-                다음 스테이지 →
+                단어 🎯
               </button>
               <button
                 onClick={() => {
-                  setGameState('start');
-                  setStage(1);
-                  setScore(0);
-                  setLives(5);
-                  setCombo(0);
+                  setStage(s => s + 1);
+                  startGame('sentence');
                 }}
-                style={{ ...styles.button, backgroundColor: '#4b5563', color: 'white' }}
-                onMouseOver={(e) => e.target.style.backgroundColor = '#374151'}
-                onMouseOut={(e) => e.target.style.backgroundColor = '#4b5563'}
+                style={{ ...styles.button, backgroundColor: '#10b981', color: 'white' }}
               >
-                처음으로
+                문장 📝
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 실패 화면 */}
-      {gameState === 'defeat' && (
-        <div style={{ ...styles.overlay, backgroundColor: 'rgba(0, 0, 0, 0.8)' }}>
-          <div style={styles.defeatBox}>
-            <h1 style={{ fontSize: '3rem', fontWeight: 'bold', color: '#fca5a5', marginBottom: '1rem' }}>
-              😢 공주 구출 실패... 😢
-            </h1>
-            <div style={{ fontSize: '4rem', margin: '1rem 0' }}>👸💔</div>
-            <p style={{ fontSize: '1.5rem', color: '#fca5a5', margin: '0.5rem 0' }}>"안 돼...!"</p>
-            <div style={{ fontSize: '1.5rem', color: '#fca5a5', margin: '1.5rem 0' }}>
-              점수: {score}점
-            </div>
             <button
-              onClick={startGame}
-              style={{ ...styles.button, backgroundColor: '#eab308', color: 'black' }}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#facc15'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#eab308'}
+              onClick={() => {
+                setGameState('start');
+                setStage(1);
+                setScore(0);
+                setLives(5);
+                setCombo(0);
+              }}
+              style={{ ...styles.button, backgroundColor: '#6b7280', color: 'white', marginTop: '0.5rem' }}
             >
-              다시 도전하기! 💪
+              처음으로
             </button>
           </div>
         </div>
       )}
 
-      <style>{`
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 1; }
-        }
-        @keyframes explode {
-          0% { transform: scale(1); opacity: 1; }
-          100% { transform: scale(3); opacity: 0; }
-        }
-        @keyframes crawl {
-          0%, 100% {
-            transform: translateY(-5px);
-          }
-          50% {
-            transform: translateY(5px);
-          }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        @keyframes glow {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.3); }
-          100% { transform: scale(1); }
-        }
-        @keyframes descend {
-          0% { 
-            top: -100px; 
-            opacity: 0;
-          }
-          50% {
-            opacity: 1;
-          }
-          100% { 
-            top: 30%; 
-            opacity: 1;
-          }
-        }
-        @keyframes firework {
-          0% { 
-            transform: scale(0) rotate(0deg); 
-            opacity: 1; 
-          }
-          50% {
-            transform: scale(1.5) rotate(180deg);
-            opacity: 0.8;
-          }
-          100% { 
-            transform: scale(0.5) rotate(360deg); 
-            opacity: 0; 
-          }
-        }
-      `}</style>
+      {gameState === 'defeat' && (
+        <div style={{ ...styles.overlay, backgroundColor: 'rgba(0, 0, 0, 0.8)' }}>
+          <div style={{ textAlign: 'center', padding: '2rem', backgroundColor: 'rgba(127, 29, 29, 0.9)', borderRadius: '1.5rem', border: '4px solid #dc2626', maxWidth: '500px' }}>
+            <h1 style={{ fontSize: '2rem', color: '#fca5a5', marginBottom: '1rem' }}>
+              😢 공주 구출 실패 😢
+            </h1>
+            <div style={{ fontSize: '2.5rem', margin: '1rem 0' }}>👸💔</div>
+            <p style={{ fontSize: '1rem', color: '#fca5a5' }}>안 돼...!</p>
+            <div style={{ fontSize: '1rem', color: '#fca5a5', margin: '1rem 0' }}>
+              점수: {score}점
+            </div>
+            <button
+              onClick={() => startGame(gameMode)}
+              style={{ ...styles.button, backgroundColor: '#eab308', color: 'black' }}
+            >
+              다시 도전! 💪
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
